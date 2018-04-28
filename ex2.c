@@ -132,29 +132,49 @@ char **AddWord(char **arr,char *ptr,char* tempApostropy,char *temp,int j)
             strcpy(arr[0],"");  
         }
         else
-        {
-            //printf("befor split\n");   
-           // printf("This is the child process. My pid is %d  , ptr= |%s|\n", getpid(),temp);
-            EnterWordToArray(arr,temp," \"\n");         
-            //printf("after split\n");
-        }            
+            EnterWordToArray(arr,temp," \"\n");                     
     }
     else
-        arr[0]=NULL;
-
-    if(arr[0]!=NULL && !strcmp(arr[0],"cd"))
-    {
-            if(arr[1]!=NULL)
-                chdir(arr[1]);         
-    }
-   // else if(arr[0]!=NULL)
-   // {
-        //Num_of_cmd++;
-        //if(arr[0]!=NULL)
-        //Cmd_length = Cmd_length + strlen(arr[0]);
-    //}   
-return arr;
+        arr[0]=NULL;  
+    return arr;
 }
+
+
+
+void pipewrite(int *pipe_fd)
+{
+    int value =-1;
+    close(pipe_fd[0]);
+    value = dup2(pipe_fd[1],STDOUT_FILENO);
+	if(value ==-1)
+	{
+	    fprintf(stderr,"dup2 failed\n");
+	    exit(1);
+	}
+}
+
+void piperead(int *pipe_fd)
+{
+    int value=-1;
+    close(pipe_fd[1]);
+    value = dup2(pipe_fd[0],STDIN_FILENO);
+	if(value ==-1)
+	{
+	    fprintf(stderr,"dup2 failed\n");
+	    exit(1);
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -179,10 +199,9 @@ int main()
     char buf1[BUFLEN];
     setpwent();
     getpwent_r(&pw,buf1,BUFLEN,&pwp);
+    unsigned long Num_of_cmd=0, Cmd_length=0;
+    unsigned long Num_cmd[2];
     
-    int value=-1;
-
-   unsigned long Num_of_cmd=0, Cmd_length=0;
     char buf[BUFSIZ];
     char temp[510];
     char temppipe[510];
@@ -191,23 +210,23 @@ int main()
     char *ptr=NULL, *left=NULL,*right=NULL;
     int j=-1,have_pipe;
     pid_t t;
-    int pipe_fd[2] ;//create pipe
-	
+    int pipe_fd[2],pipe_command[2] ;//create pipe
+	unsigned long buff[2],n;
 	printf("%s@%s>",pwp->pw_name,getcwd(buf, sizeof(buf)));
     fgets(temp,sizeof(temp),stdin);
+    Num_cmd [0]=Num_of_cmd;
+    Num_cmd [1]=Cmd_length;
     
     
     while(strcmp(temp,"done\n"))
     {
-        
         strcpy(temppipe,temp);
         ptr = strtok(temppipe,"|\0");
         left=(char*)malloc(strlen(ptr)*sizeof(char));
         strcpy(left,ptr);
-       // printf("command left is: |%s|\n",left);  
+        // printf("command left is: |%s|\n",left);  
         if(strcmp(ptr,temp)==0)
         {
-            
             have_pipe=NO_PIPE;//no pipe on string
             t=0;
         }
@@ -218,6 +237,11 @@ int main()
             strcpy(right,ptr);
             have_pipe=HAVE_PIPE;//have pipe on string
             if ((pipe(pipe_fd)) == -1)
+	        {
+		        perror("cannot open pipe");
+		        exit(EXIT_FAILURE) ;
+	        }
+             if ((pipe(pipe_command)) == -1)
 	        {
 		        perror("cannot open pipe");
 		        exit(EXIT_FAILURE) ;
@@ -243,17 +267,29 @@ int main()
             strcpy(tempApostropy,left);
             j=NumberOfWards(tempSize," \"\n");
             arr=AddWord(arr,ptr,tempApostropy,left,j);
+            if(arr[0]!=NULL && !strcmp(arr[0],"cd"))
+            {
+                    if(arr[1]!=NULL)
+                        chdir(arr[1]);         
+            }
+            else if(arr[0]!=NULL)
+            {  
+          
+                Num_of_cmd++;
+                if(arr[0]!=NULL)
+                    Cmd_length = Cmd_length + strlen(arr[0]);
+                if(have_pipe==HAVE_PIPE)                
+                {           
+                    close (pipe_command[0]);
+                    Num_cmd[0] = Num_of_cmd;
+                    Num_cmd[1] = Cmd_length;
+                    write(pipe_command[1], &Num_cmd, 2*sizeof(unsigned long*));
+                    close(pipe_command[1]);
+                }
+            } 
             //printf("command left in arr[0] = |%s|\n",arr[0]);
             if(have_pipe==HAVE_PIPE)
-            {
-                close(pipe_fd[0]);
-                value = dup2(pipe_fd[1],STDOUT_FILENO);
-	            if(value ==-1)
-	            {
-		            fprintf(stderr,"dup2 failed\n");
-		            exit(1);
-	            }
-            }
+                pipewrite(pipe_fd);
             else
             {
                t=fork();
@@ -265,9 +301,6 @@ int main()
             }
             if(t==0)
             {
-                // printf("test1\n");
-                 //fprintf(stderr,"test2\n");
-               //printf("This is the child process. My pid is %d and my parent's id is %d.\n", getpid(), getppid());
                 
 		        if(execvp(arr[0],arr)!=0)
                    printf("%s: command not found\n",arr[0]);
@@ -286,9 +319,9 @@ int main()
                 exit(1);
             }
             int pidchildright=getpid();
-             if(t==0)
+            if(t==0)
 	        {       
-               // printf("This is the child process right. My pid is %d \n", getpid());
+                // printf("This is the child process right. My pid is %d \n", getpid());
                 //printf("command right is: |%s|\n",right); 
 		        strcpy(tempSpace,right);
                 ptr = strtok(tempSpace," \0");
@@ -297,22 +330,24 @@ int main()
                 strcpy(tempApostropy,right);
                 j=NumberOfWards(tempSize," \"\n");
                 arr=AddWord(arr,ptr,tempApostropy,right,j);
-                //printf("command right in arr1[0] = |%s|\n",arr[0]);   
-                close(pipe_fd[1]);
-                value = dup2(pipe_fd[0],STDIN_FILENO);
-                if(value ==-1)
-	            {
-	                fprintf(stderr,"dup2 failed\n");
-		            exit(1);
-	            }
-                //printf("This is the child process. My pid is %d and my parent's id is %d.\n", getpid(), getppid());
+                piperead(pipe_fd);
 		        if(execvp(arr[0],arr)!=0)
                     printf("%s: command not found\n",arr[0]);
                 exit(0);
             }
             
             
-            
+            close (pipe_command[1]);
+            n=read(pipe_command[0],&buff,2*sizeof(unsigned long*));
+	        if(n<=0)
+	        {
+                perror("read failed\n");
+                exit(EXIT_FAILURE);
+	        }
+               
+            Num_of_cmd+=buff[0];
+            Cmd_length+=buff[1];
+            close(pipe_command[0]);    
         waitpid(pidchildleft,NULL,0);//whait to child 
         close(pipe_fd[1]); 
        // fprintf(stderr,"son left done and closed\n");        
@@ -322,13 +357,13 @@ int main()
         } 
 
     
-            
+    wait(NULL);//whait to child         
     wait(NULL);//whait to child 
     wait(NULL);//whait to child
     freearr(arr,j);
 	printf("%s@%s>",pwp->pw_name,getcwd(buf, sizeof(buf)));
     fgets(temp,sizeof(temp),stdin);
-    }
+    }  
     
     printf("Num of cmd: %lu\n",Num_of_cmd);
     printf("Cmd length: %lu\n",Cmd_length);
@@ -337,6 +372,7 @@ int main()
 
 return 0;
 }
+
 
 
 
