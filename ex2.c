@@ -19,7 +19,7 @@
 #define BUFLEN 4096
 #define HAVE_PIPE 1
 #define NO_PIPE 0
-
+pid_t son_run=-1;
 
 //The function counts how many arguments were entered from the writing line
 int NumberOfWards(char *word, char *x)
@@ -172,7 +172,24 @@ void piperead(int *pipe_fd)
 
 
 
-
+void sig_handler(int signo)
+{
+    
+	signal(SIGINT, sig_handler);
+	
+	if(signo==SIGINT)
+    {
+        if(son_run!=0)
+          kill(son_run,SIGINT);
+             
+    }
+    else if(signo==SIGSTOP)
+    {
+        if(son_run!=0)
+          kill(son_run,SIGINT);
+             
+    }
+}
 
 
 
@@ -194,7 +211,7 @@ void freearr(char** arr,int num_word)
 /*-------------------------------------------------------------------------------*/
 int main()
 {
-
+    signal(SIGINT, sig_handler);
     struct passwd pw ,*pwp;
     char buf1[BUFLEN];
     setpwent();
@@ -258,8 +275,9 @@ int main()
                 exit(1);
             }		
         }
+        son_run=t;
         if(t==0)
-        {
+        {   
             //printf("This is the child process left. My pid is %d\n", getpid());
             strcpy(tempSpace,left);
             ptr = strtok(tempSpace," \0");
@@ -299,6 +317,7 @@ int main()
                     exit(1);
                 } 
             }
+            son_run=t;
             if(t==0)
             {
                 
