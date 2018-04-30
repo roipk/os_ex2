@@ -36,10 +36,8 @@ int NumberOfWards(char *word, char *x)
                count++;
         }        
     }
-   // printf("count=%d\n",count);
     if(count>0)
         return -1;
-    //printf("in\n");
 	int numword = 0;
 	char *ptr;
 	ptr = strtok(word,x);
@@ -199,9 +197,7 @@ void sig_handler(int signo)
 /*-------------------------------------------------------------------------------*/
 //The function frees the array
 void freearr(char** arr,int num_word)
-{
-//printf("ttttt= |%s|\n",arr[0]);
-//printf("innnnnnnnnnn freeeeeee\n");
+{   
     for(int j=0;j<num_word;j++)
         free(arr[j]);
     free(arr);
@@ -217,8 +213,8 @@ int main()
     setpwent();
     getpwent_r(&pw,buf1,BUFLEN,&pwp);
     unsigned long Num_of_cmd=0, Cmd_length=0;
-    unsigned long Num_cmd[2];
-    
+    unsigned long Num_cmd[3];
+	unsigned long buff[2],n;
     char buf[BUFSIZ];
     char temp[510];
     char temppipe[510];
@@ -226,14 +222,14 @@ int main()
     char **arr;
     char *ptr=NULL, *left=NULL,*right=NULL;
     int j=-1,have_pipe;
-    pid_t t;
     int pipe_fd[2],pipe_command[2] ;//create pipe
-	unsigned long buff[2],n;
+    
+    pid_t t;
 	printf("%s@%s>",pwp->pw_name,getcwd(buf, sizeof(buf)));
     fgets(temp,sizeof(temp),stdin);
     Num_cmd [0]=Num_of_cmd;
     Num_cmd [1]=Cmd_length;
-    
+    Num_cmd [2]=j;
     
     while(strcmp(temp,"done\n"))
     {
@@ -241,7 +237,6 @@ int main()
         ptr = strtok(temppipe,"|\0");
         left=(char*)malloc(strlen(ptr)*sizeof(char));
         strcpy(left,ptr);
-        // printf("command left is: |%s|\n",left);  
         if(strcmp(ptr,temp)==0)
         {
             have_pipe=NO_PIPE;//no pipe on string
@@ -278,7 +273,6 @@ int main()
         son_run=t;
         if(t==0)
         {   
-            //printf("This is the child process left. My pid is %d\n", getpid());
             strcpy(tempSpace,left);
             ptr = strtok(tempSpace," \0");
             strcpy(tempSize,left);
@@ -305,18 +299,17 @@ int main()
                     close(pipe_command[1]);
                 }
             } 
-            //printf("command left in arr[0] = |%s|\n",arr[0]);
             if(have_pipe==HAVE_PIPE)
-                pipewrite(pipe_fd);
-            else
             {
-               t=fork();
-                if(t==-1)
-                {
-                    printf("ERR\n");
-                    exit(1);
-                } 
+                pipewrite(pipe_fd);
             }
+         
+            t=fork();
+            if(t==-1)
+            {
+                printf("ERR\n");
+                exit(1);
+            } 
             son_run=t;
             if(t==0)
             {
@@ -324,6 +317,11 @@ int main()
 		        if(execvp(arr[0],arr)!=0)
                    printf("%s: command not found\n",arr[0]);
                  exit(0);
+            }
+            freearr(arr,j);
+            if(have_pipe==HAVE_PIPE)
+            {
+                exit(0);
             }
             
         }
@@ -340,11 +338,8 @@ int main()
             int pidchildright=getpid();
             if(t==0)
 	        {       
-                // printf("This is the child process right. My pid is %d \n", getpid());
-                //printf("command right is: |%s|\n",right); 
-		        strcpy(tempSpace,right);
+ 		        strcpy(tempSpace,right);
                 ptr = strtok(tempSpace," \0");
-                //printf("command ptr right is: |%s|\n",ptr); 
                 strcpy(tempSize,right);
                 strcpy(tempApostropy,right);
                 j=NumberOfWards(tempSize," \"\n");
@@ -352,6 +347,7 @@ int main()
                 piperead(pipe_fd);
 		        if(execvp(arr[0],arr)!=0)
                     printf("%s: command not found\n",arr[0]);
+                freearr(arr,j);
                 exit(0);
             }
             
@@ -363,23 +359,18 @@ int main()
                 perror("read failed\n");
                 exit(EXIT_FAILURE);
 	        }
-               
             Num_of_cmd+=buff[0];
             Cmd_length+=buff[1];
             close(pipe_command[0]);    
-        waitpid(pidchildleft,NULL,0);//whait to child 
-        close(pipe_fd[1]); 
-       // fprintf(stderr,"son left done and closed\n");        
-        waitpid(pidchildright,NULL,0);//whait to child 
-        close(pipe_fd[0]);
-        //fprintf(stderr,"son right done and closed\n");        
+            waitpid(pidchildleft,NULL,0);//whait to child 
+            close(pipe_fd[1]); 
+            waitpid(pidchildright,NULL,0);//whait to child 
+            close(pipe_fd[0]);
+           
         } 
-
-    
     wait(NULL);//whait to child         
     wait(NULL);//whait to child 
     wait(NULL);//whait to child
-    freearr(arr,j);
 	printf("%s@%s>",pwp->pw_name,getcwd(buf, sizeof(buf)));
     fgets(temp,sizeof(temp),stdin);
     }  
