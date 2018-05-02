@@ -23,6 +23,7 @@
 #define CHANGE_ERRPUT 3
 pid_t son_run=-1;
 pid_t son2_run=-1;
+pid_t son3_run=-1;
 
 //The function counts how many arguments were entered from the writing line
 int NumberOfWards(char *word, char *x)
@@ -88,6 +89,7 @@ void arguments(char** arr,char *word, int i)
             ptr = strtok(NULL,"\"\n\0");
         }   
     }
+    free(temp);
 }
 
 
@@ -143,37 +145,9 @@ char **AddWord(char **arr,char *ptr,char* tempApostropy,char *temp,int j)
 }
 
 
-/*
-void pipewrite(int *pipe_fd)
-{
-    int value =-1;
-    close(pipe_fd[0]);
-    value = dup2(pipe_fd[1],STDOUT_FILENO);
-	if(value ==-1)
-	{
-	    fprintf(stderr,"dup2 failed\n");
-	    exit(1);
-	}
-}
-
-void piperead(int *pipe_fd)
-{
-    int value=-1;
-    close(pipe_fd[1]);
-    value = dup2(pipe_fd[0],STDIN_FILENO);
-	if(value ==-1)
-	{
-	    fprintf(stderr,"dup2 failed\n");
-	    exit(1);
-	}
-}
-*/
-
 
 void freefromarray(char** arr,int num_start,int num_end)
 {
-//printf("ttttt= |%s|\n",arr[0]);
-//printf("innnnnnnnnnn freeeeeee\n");
     for(int j=num_start;j<num_end;j++)
         free(arr[j]);
     arr[num_start]=NULL;
@@ -185,15 +159,11 @@ void createpipe(int *pipe_fd,int file_number,int std)
     int value =-1;
     if(std==STDOUT_FILENO)
     {
-        //printf("file number is: %d\n",file_number);
         close(pipe_fd[0]);
-        //printf(" pipe closed\n");
         value = dup2(file_number,STDOUT_FILENO);
-        //fprintf(stderr,"value = %d\n",value);
     }
     else if(std==STDIN_FILENO)
     {
-        //printf("file number2 is: %d\n",file_number);
         close(pipe_fd[1]);
         value = dup2(file_number,STDIN_FILENO); 
     }
@@ -207,17 +177,13 @@ void createpipe(int *pipe_fd,int file_number,int std)
 	    fprintf(stderr,"dup2 failed\n");
 	    exit(1);
 	}
-    //fprintf(stderr,"pipe create done\n");
 }
 
 
 void change(char** arr, int j,int *pipe_fd)
 {
-   // char* temp;
     if(j<3)
         return;
-    //printf("in1\n");
-    //int have_assignment=0;   
     int fd;
 	char file[100];
     strcpy(file,arr[j-1]);
@@ -225,7 +191,6 @@ void change(char** arr, int j,int *pipe_fd)
     {
         fd = open(file,O_RDONLY,S_IRUSR | S_IWUSR | S_IROTH);        
         createpipe(pipe_fd,fd,STDIN_FILENO); 
-       // have_assignment=CHANGE_INPUT;
         freefromarray(arr,j-2,j);
     }
     
@@ -235,8 +200,6 @@ void change(char** arr, int j,int *pipe_fd)
         if(fd==-1)
             exit(1);
         createpipe(pipe_fd,fd,STDOUT_FILENO);
-        //shave_assignment=CHANGE_OUTPUT;
-        //printf("done\n");
         freefromarray(arr,j-2,j);
     }
     
@@ -246,7 +209,6 @@ void change(char** arr, int j,int *pipe_fd)
         if(fd==-1)
             exit(1);
         createpipe(pipe_fd,fd,STDOUT_FILENO);
-        //have_assignment=CHANGE_OUTPUT;
         freefromarray(arr,j-2,j);
     }
     
@@ -256,13 +218,8 @@ void change(char** arr, int j,int *pipe_fd)
         if(fd==-1)
             exit(1);
         createpipe(pipe_fd,fd,STDERR_FILENO);
-        //have_assignment=CHANGE_ERRPUT;
         freefromarray(arr,j-2,j);
-    }
-
-    
-    
-   // return have_assignment;
+    } 
 }
 
 
@@ -282,14 +239,14 @@ void sig_handler(int signo)
     }
     else if(signo==SIGCHLD)
     {
-        //printf("in\n");
         if(son_run!=0)
             waitpid(son_run,&status, WNOHANG);                   
         if(son2_run!=0)
             waitpid(son2_run,&status, WNOHANG);
+        if(son3_run!=0)
+            waitpid(son2_run,&status, WNOHANG);
         else
-            wait(NULL);
-             
+            wait(NULL);           
     }
 }
 
@@ -302,9 +259,6 @@ void sig_handler(int signo)
 //The function frees the array
 void freearr(char** arr,int num_word)
 {
-//printf("ttttt= |%s|\n",arr[0]);
-//printf("innnnnnnnnnn freeeeeee\n");
-                //(stderr,"num word %d\n",num_word);   
     for(int j=0;j<num_word;j++)
         free(arr[j]);
     free(arr);
@@ -320,6 +274,7 @@ int main()
     char buf1[BUFLEN];
     setpwent();
     getpwent_r(&pw,buf1,BUFLEN,&pwp);
+    
     unsigned long Num_of_cmd=0, Cmd_length=0;
     unsigned long Num_cmd[2];
     
@@ -337,16 +292,15 @@ int main()
     fgets(temp,sizeof(temp),stdin);
     Num_cmd [0]=Num_of_cmd;
     Num_cmd [1]=Cmd_length;
-    //Num_cmd [2]=j;
     
     while(strcmp(temp,"done\n"))
     {
+        printf("in\n");
         flag=1;
         strcpy(temppipe,temp);
         ptr = strtok(temppipe,"|\0");
         left=(char*)malloc(strlen(ptr)*sizeof(char));
         strcpy(left,ptr);
-        // printf("command left is: |%s|\n",left);  
         if(strcmp(ptr,temp)==0)
         {
             have_pipe=NO_PIPE;//no pipe on string
@@ -388,14 +342,14 @@ int main()
         son_run=t;
         if(t==0)
         {   
-            //printf("This is the child process left. My pid is %d\n", getpid());
             strcpy(tempSpace,left);
             ptr = strtok(tempSpace," \0");
             strcpy(tempSize,left);
             strcpy(tempApostropy,left);
             j=NumberOfWards(tempSize," \"\n");
-            //fprintf(stderr,"left son - j = %d\n",j);   
             arr=AddWord(arr,ptr,tempApostropy,left,j);
+            free(left);
+            left = NULL;
             if(arr[0]!=NULL && !strcmp(arr[0],"cd"))
             {
                     if(arr[1]!=NULL)
@@ -419,7 +373,6 @@ int main()
                     close(pipe_command[1]);
                 }
             } 
-            //printf("command left in arr[0] = |%s|\n",arr[0]);
             if(have_pipe==CHANGE_OUTPUT)
             {
                 createpipe(pipe_fd,pipe_fd[1],STDOUT_FILENO);
@@ -433,14 +386,13 @@ int main()
                 }  
                 else
                     flag =1;       
-          //  fprintf(stderr,"in1\n");
             t=fork();
             if(t==-1)
             {
                 printf("ERR\n");
                 exit(1);
             } 
-            son_run=t;
+            son2_run=t;
             if(t==0)
             {                 
                 change( arr,j,pipe_folder);
@@ -448,7 +400,6 @@ int main()
                    printf("%s: command not found\n",arr[0]);
                  exit(0);
             }
-            //fprintf(stderr,"in2\n");
             freearr(arr,j);
             if(have_pipe==CHANGE_OUTPUT)
             {
@@ -460,27 +411,23 @@ int main()
         
         else        
         {   
-           // int pidchildleft=getpid();  
             t=fork();
             if(t==-1)
             {
                 printf("ERR\n");
                 exit(1);
             }
-            son2_run=t;
-           // int pidchildright=getpid();
+            son3_run=t;
             if(t==0)
 	        {       
-                // printf("This is the child process right. My pid is %d \n", getpid());
-                //printf("command right is: |%s|\n",right); 
 		        strcpy(tempSpace,right);
                 ptr = strtok(tempSpace," \0");
-                //printf("command ptr right is: |%s|\n",ptr); 
                 strcpy(tempSize,right);
                 strcpy(tempApostropy,right);
                 j=NumberOfWards(tempSize," \"\n");
-                //fprintf(stderr," right son - j = %d\n",j);  
                 arr=AddWord(arr,ptr,tempApostropy,right,j);
+                free(right);
+                right=NULL;
                 createpipe(pipe_fd,pipe_fd[0],STDIN_FILENO);
                 change(arr,j,pipe_folder);
 		        if(execvp(arr[0],arr)!=0)
@@ -500,31 +447,26 @@ int main()
             Num_of_cmd+=buff[0];
             Cmd_length+=buff[1];
             close(pipe_command[0]);    
-           // waitpid(pidchildleft,NULL,0);//whait to child 
             close(pipe_fd[1]); 
-            // fprintf(stderr,"son left done and closed\n");        
-            //waitpid(pidchildright,NULL,0);//whait to child 
-            close(pipe_fd[0]);
-        //fprintf(stderr,"son right done and closed\n");        
-           
+            close(pipe_fd[0]);         
         }
-    printf("flag: %d", flag);
+
     if(flag == 1)
         pause();
-    //wait(NULL);//whait to child         
-    //wait(NULL);//whait to child 
-    //wait(NULL);//whait to child
-    //fprintf(stderr,"j done = %d\n",j);  
+      
 	printf("%s@%s>",pwp->pw_name,getcwd(buf, sizeof(buf)));
     fgets(temp,sizeof(temp),stdin);
-    }  
-    
+    } 
+    if(left != NULL) 
+        free(left);
+    if(right != NULL)
+        free(right);
     printf("Num of cmd: %lu\n",Num_of_cmd);
     printf("Cmd length: %lu\n",Cmd_length);
     printf("Bye !\n");
-    
 
-return 0;
+    endpwent();
+    return 0;
 }
 
 
